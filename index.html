@@ -1,57 +1,63 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro Fotográfico Web</title>
-    
+    <title>Registro Fotográfico PDF</title>
     <link rel="stylesheet" href="styles.css">
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
-
     <div class="container">
-        <div class="controls">
-            <div>
-                <label for="file-upload" class="file-input">🖼️ Cargar Imágenes</label>
-                <input type="file" id="file-upload" accept="image/*" multiple>
-
-                <div style="margin-left: 20px;">
-                    <span>Ordenar por:</span>
-                    <select id="order-select" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
-                        <option value="manual">Orden Manual</option>
-                        <option value="name">Nombre (A-Z)</option>
-                        <option value="date">Fecha de Modificación (Reciente)</option>
-                    </select>
+        <h1 class="title">📋 Registro Fotográfico PDF</h1>
+        <div class="compact-section">
+            <div class="input-row">
+                <div class="input-col">
+                    <label for="pdf-title-input">Título</label>
+                    <input type="text" id="pdf-title-input" value="REPORTE FOTOGRÁFICO" maxlength="60" placeholder="Título del PDF">
+                </div>
+                <div class="input-col">
+                    <label for="pdf-filename-input">Nombre PDF</label>
+                    <input type="text" id="pdf-filename-input" maxlength="40" placeholder="Nombre del archivo">
                 </div>
             </div>
-
-            <div class="actions">
-                 <button id="clear-all-btn">🧹 Limpiar Todo</button>
-                 <button id="generate-pdf-btn" style="padding: 10px 20px; background-color: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s;">
-                    📄 Generar PDF
-                </button>
+            <div class="controls">
+                <div class="controls-left">
+                    <label for="file-upload" class="btn btn-upload" style="margin-bottom:0;">📤 Subir imágenes</label>
+                    <input type="file" id="file-upload" accept="image/*" multiple>
+                    <select id="order-select" title="Ordenar imágenes">
+                        <option value="manual">Orden manual</option>
+                        <option value="name">Por nombre</option>
+                        <option value="date">Por fecha</option>
+                    </select>
+                </div>
+                <div class="controls-right">
+                    <button id="generate-pdf-btn" class="btn btn-primary" disabled>
+                        <span style="vertical-align:middle;">&#128196; Generar PDF</span>
+                    </button>
+                    <button id="clear-all-btn" class="btn btn-secondary">
+                        <span style="vertical-align:middle;">&#128465; Limpiar</span>
+                    </button>
+                </div>
             </div>
         </div>
-
         <div id="canvas-imagenes">
-            <div id="frame-imagenes">
-                <p id="no-images-msg">No hay imágenes cargadas.</p>
-            </div>
+            <div id="frame-imagenes"></div>
+            <div id="no-images-msg">No hay imágenes cargadas.</div>
         </div>
     </div>
-
     <div id="loader-overlay">
         <div class="loader-content">
-            <p>✍️ Generando documento, por favor espere...</p>
+            <span style="font-size:1.1em;font-weight:500;">Generando PDF...</span>
             <div class="progress-bar">
                 <div class="progress-bar-inner"></div>
             </div>
         </div>
     </div>
-
+    <footer style="text-align:center;padding:12px 0;color:#888;font-size:0.95em;">
+        &copy; 2025 Registro Fotográfico PDF &mdash; <a href="https://github.com/rmalcac16/registrofotografico" style="color:#667eea;text-decoration:none;">GitHub</a>
+    </footer>
     <script src="script.js"></script>
 </body>
 </html>
