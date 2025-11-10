@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro Fotográfico Web</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        .file-input {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .file-input:hover {
+            background-color: #45a049;
+        }
+        #file-upload {
+            display: none;
+        }
+        #canvas-imagenes {
+            height: 60vh;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        #frame-imagenes {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            padding: 10px;
+            min-height: 100%;
+        }
+        .image-frame {
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            padding: 5px;
+            width: 200px;
+            text-align: center;
+            cursor: grab;
+            background-color: #fff;
+            transition: box-shadow 0.2s, border-color 0.2s;
+            position: relative;
+        }
+        .image-frame.dragging {
+            opacity: 0.5;
+            transform: scale(1.05);
+            z-index: 1000;
+        }
+        .image-frame.drag-over {
+            border-color: #007bff;
+            box-shadow: 0 0 10px rgba(0, 123, 255, 0.5);
+        }
+        .image-frame.selected {
+            border: 4px ridge #007bff;
+        }
+        .image-frame img {
+            max-width: 100%;
+            height: 100px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+        }
+        .order-label {
+            font-weight: bold;
+            margin-top: 5px;
+            display: block;
+        }
+        .filename-label {
+            font-size: 0.8em;
+            color: #666;
+            word-wrap: break-word;
+            padding: 0 5px;
+        }
+        #loader-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        .loader-content {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .progress-bar {
+            width: 200px;
+            height: 10px;
+            background-color: #f3f3f3;
+            border-radius: 5px;
+            margin: 10px auto;
+            overflow: hidden;
+        }
+        .progress-bar-inner {
+            height: 100%;
+            background-color: #007bff;
+            animation: indeterminate-progress 1.5s infinite linear;
+        }
+        @keyframes indeterminate-progress {
+            0% {
+                transform: translateX(-100%) scaleX(0.1);
+            }
+            100% {
+                transform: translateX(200%) scaleX(1);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="controls">
+            <div style="display: flex; align-items: center;">
+                <label for="file-upload" class="file-input">🖼️ Cargar Imágenes</label>
+                <input type="file" id="file-upload" accept="image/*" multiple>
+
+                <div style="margin-left: 20px;">
+                    <span>Ordenar por:</span>
+                    <select id="order-select" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                        <option value="manual">Orden Manual</option>
+                        <option value="name">Nombre (A-Z)</option>
+                        <option value="date">Fecha de Modificación (Reciente)</option>
+                    </select>
+                </div>
+            </div>
+
+            <button id="generate-pdf-btn" style="padding: 10px 20px; background-color: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s;">
+                📄 Generar PDF
+            </button>
+        </div>
+
+        <div id="canvas-imagenes">
+            <div id="frame-imagenes">
+                <p id="no-images-msg">No hay imágenes cargadas.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="loader-overlay">
+        <div class="loader-content">
+            <p>✍️ Generando documento, por favor espere...</p>
+            <div class="progress-bar">
+                <div class="progress-bar-inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileUpload = document.getElementById('file-upload');
+        const frameImagenes = document.getElementById('frame-imagenes');
+        const orderSelect = document.getElementById('order-select');
+        const noImagesMsg = document.getElementById('no-images-msg');
+        const generatePdfBtn = document.getElementById('generate-pdf-btn');
+        const loaderOverlay = document.getElementById('loader-overlay');
+
+        let loadedFiles = [];
+        let selectedElement = null;
+
+        generatePdfBtn.onclick = generatePdfDownload;
+
+        fileUpload.addEventListener('change', (event) => {
+            const files = Array.from(event.target.files);
+            
+            const newFiles = files.filter(newFile => 
+                !loadedFiles.some(existingFile => 
+                    existingFile.name === newFile.name && existingFile.size === newFile.size
+                )
+            );
+
+            newFiles.forEach(file => {
+                loadedFiles.push({
+                    file: file,
+                    url: URL.createObjectURL(file),
+                    name: file.name,
+                    lastModified: file.lastModified
+                });
+            });
+
+            orderSelect.value = 'manual';
+            updateImageDisplay();
+        });
+
+        orderSelect.addEventListener('change', () => {
+            const criteria = orderSelect.value;
+
+            if (criteria === 'name') {
+                loadedFiles.sort((a, b) => a.name.localeCompare(b.name));
+            } else if (criteria === 'date') {
+                loadedFiles.sort((a, b) => b.lastModified - a.lastModified);
+            }
+            
+            updateImageDisplay();
+        });
+
+        function updateImageDisplay() {
+            frameImagenes.innerHTML = '';
+            
+            if (loadedFiles.length === 0) {
+                frameImagenes.appendChild(noImagesMsg);
+                generatePdfBtn.disabled = true;
+                return;
+            }
+            
+            generatePdfBtn.disabled = false;
+            
+            loadedFiles.forEach((fileData, index) => {
+                const frame = document.createElement('div');
+                frame.className = 'image-frame';
+                frame.draggable = true;
+                frame.dataset.index = index;
+                frame.dataset.filename = fileData.name;
+
+                frame.innerHTML = `
+                    <img src="${fileData.url}" alt="${fileData.name}" class="pdf-image">
+                    <span class="order-label">Orden: ${index + 1}</span>
+                    <span class="filename-label">${fileData.name}</span>
+                `;
+
+                frame.addEventListener('click', (e) => {
+                    if (orderSelect.value !== 'manual') return; 
+                    
+                    const clickedIndex = parseInt(frame.dataset.index);
+                    handleSelectionSwap(frame, clickedIndex);
+                });
+
+                frame.addEventListener('dragstart', handleDragStart);
+                frame.addEventListener('dragover', handleDragOver);
+                frame.addEventListener('dragleave', handleDragLeave);
+                frame.addEventListener('drop', handleDrop);
+                frame.addEventListener('dragend', handleDragEnd);
+
+                frameImagenes.appendChild(frame);
+            });
+        }
+        
+        function handleDragStart(e) {
+            if (orderSelect.value !== 'manual') return e.preventDefault();
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.dataset.index);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault(); 
+            this.classList.add('drag-over');
+            e.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDragLeave() {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+
+            if (orderSelect.value !== 'manual') return;
+
+            const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            const targetIndex = parseInt(this.dataset.index);
+
+            if (draggedIndex !== targetIndex) {
+                const [movedFile] = loadedFiles.splice(draggedIndex, 1);
+                loadedFiles.splice(targetIndex, 0, movedFile);
+
+                updateImageDisplay();
+            }
+        }
+        
+        function handleDragEnd() {
+            this.classList.remove('dragging');
+        }
+
+        function handleSelectionSwap(frame, clickedIndex) {
+            if (selectedElement === null) {
+                selectedElement = { frame, index: clickedIndex };
+                frame.classList.add('selected');
+            } else if (selectedElement.index === clickedIndex) {
+                selectedElement.frame.classList.remove('selected');
+                selectedElement = null;
+            } else {
+                const targetIndex = clickedIndex;
+                const sourceIndex = selectedElement.index;
+
+                const [movedFile] = loadedFiles.splice(sourceIndex, 1);
+                loadedFiles.splice(targetIndex, 0, movedFile);
+
+                selectedElement.frame.classList.remove('selected');
+                selectedElement = null;
+                updateImageDisplay();
+            }
+        }
+
+        async function generatePdfDownload() {
+            if (loadedFiles.length === 0) return;
+
+            loaderOverlay.style.display = 'block';
+            generatePdfBtn.disabled = true;
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4'); 
+            const docWidth = 210;
+            const docHeight = 297;
+            let yOffset = 15;
+
+            // Constantes de diseño del encabezado
+            const HEADER_HEIGHT_PX = 50;
+            const HEADER_HEIGHT_MM = HEADER_HEIGHT_PX * 25.4 / 96; // Convertir px a mm (96dpi es común en navegadores)
+            const HEADER_LOGO_TEXT_SPACING_MM = 5; // Espacio entre logo y texto en mm
+            const HEADER_LINE_SPACE_MM = 2.5;
+            const CONTENT_START_SPACE_MM = 1.2;
+
+            try {
+                // Cargar logos
+                const logoIzquierdo = new Image();
+                logoIzquierdo.src = 'logo_izquierdo.png';
+                await new Promise(resolve => logoIzquierdo.onload = resolve);
+                const logoDerecho = new Image();
+                logoDerecho.src = 'logo_derecho.png';
+                await new Promise(resolve => logoDerecho.onload = resolve);
+
+                // Función para añadir el encabezado a cada página
+                const addHeader = (pageNumber = 1, totalPages = 1) => {
+                    let headerY = 15; // Posición Y inicial para el encabezado
+
+                    // Título (Centrado)
+                    pdf.setFontSize(16);
+                    const titleText = (pageNumber === 1) ? 'REGISTRO FOTOGRÁFICO' : `REGISTRO FOTOGRÁFICO (Pág. ${pageNumber} de ${totalPages})`;
+                    pdf.text(titleText, docWidth / 2, headerY + HEADER_HEIGHT_MM / 2 - 2, { align: 'center' });
+                    
+                    const titleTextWidth = pdf.getStringUnitWidth(titleText) * pdf.internal.getFontSize() / pdf.internal.scaleFactor;
+                    const titleStartX = (docWidth / 2) - (titleTextWidth / 2);
+                    const titleEndX = (docWidth / 2) + (titleTextWidth / 2);
+
+                    // Logo Izquierdo
+                    if (logoIzquierdo.src) {
+                        const aspectRatio = logoIzquierdo.width / logoIzquierdo.height;
+                        const logoHeight = HEADER_HEIGHT_MM;
+                        const logoWidth = logoHeight * aspectRatio;
+                        const xLogoIzq = titleStartX - logoWidth - HEADER_LOGO_TEXT_SPACING_MM;
+                        pdf.addImage(logoIzquierdo, 'PNG', xLogoIzq, headerY, logoWidth, logoHeight);
+                    }
+
+                    // Logo Derecho
+                    if (logoDerecho.src) {
+                        const aspectRatio = logoDerecho.width / logoDerecho.height;
+                        const logoHeight = HEADER_HEIGHT_MM;
+                        const logoWidth = logoHeight * aspectRatio;
+                        const xLogoDer = titleEndX + HEADER_LOGO_TEXT_SPACING_MM;
+                        pdf.addImage(logoDerecho, 'PNG', xLogoDer, headerY, logoWidth, logoHeight);
+                    }
+                    
+                    // Línea separadora
+                    pdf.line(15, headerY + HEADER_HEIGHT_MM + HEADER_LINE_SPACE_MM, docWidth - 15, headerY + HEADER_HEIGHT_MM + HEADER_LINE_SPACE_MM);
+                    
+                    return headerY + HEADER_HEIGHT_MM + HEADER_LINE_SPACE_MM + CONTENT_START_SPACE_MM + 5; // Nueva Y de inicio para el contenido
+                };
+
+                const numImagesPerPage = 6;
+                const totalPages = Math.ceil(loadedFiles.length / numImagesPerPage);
+
+                yOffset = addHeader(1, totalPages);
+
+                const imgWidth = 80;
+                const imgHeight = 80;
+                const hGap = 10;
+                const vGap = 15;
+                const startX = (docWidth - (imgWidth * 2 + hGap)) / 2;
+                let currentX = startX;
+
+                for (let i = 0; i < loadedFiles.length; i++) {
+                    const fileData = loadedFiles[i];
+                    
+                    if (yOffset + imgHeight + vGap > docHeight - 15) { // Si no hay espacio en la página actual
+                        pdf.addPage();
+                        yOffset = addHeader(Math.floor(i / numImagesPerPage) + 1, totalPages);
+                        currentX = startX;
+                    }
+                    
+                    const img = new Image();
+                    img.src = fileData.url;
+                    await new Promise(resolve => img.onload = resolve);
+
+                    const dataUrl = fileData.url;
+                    
+                    pdf.addImage(dataUrl, 'JPEG', currentX, yOffset, imgWidth, imgHeight, null, 'FAST');
+                    
+                    pdf.setFontSize(8);
+                    pdf.text(`Foto ${i + 1}`, currentX, yOffset + imgHeight + 3);
+
+                    if (currentX === startX) {
+                        currentX += imgWidth + hGap;
+                    } else {
+                        currentX = startX;
+                        yOffset += imgHeight + vGap;
+                    }
+                }
+
+                pdf.save('Registro_Fotografico.pdf');
+
+            } catch (error) {
+                console.error("Error al generar el PDF:", error);
+                alert("Ocurrió un error al generar el PDF. Revisa la consola.");
+            } finally {
+                loaderOverlay.style.display = 'none';
+                generatePdfBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
