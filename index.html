@@ -145,6 +145,29 @@
                 transform: translateX(200%) scaleX(1);
             }
         }
+        /* ESTILO PARA EL BOTÓN DE ELIMINAR */
+        .remove-btn {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 14px;
+            cursor: pointer;
+            line-height: 24px;
+            text-align: center;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: background 0.2s;
+            z-index: 10;
+        }
+        .remove-btn:hover {
+            background: #c82333;
+        }
     </style>
 </head>
 <body>
@@ -213,6 +236,7 @@
                     file: file,
                     url: URL.createObjectURL(file),
                     name: file.name,
+                    size: file.size, // Guardar el tamaño para el filtro
                     lastModified: file.lastModified
                 });
             });
@@ -233,6 +257,19 @@
             updateImageDisplay();
         });
 
+        function removeImage(indexToRemove) {
+            if (indexToRemove >= 0 && indexToRemove < loadedFiles.length) {
+                // Liberar URL del objeto para evitar fugas de memoria
+                URL.revokeObjectURL(loadedFiles[indexToRemove].url);
+                // Eliminar del array
+                loadedFiles.splice(indexToRemove, 1);
+                // Recargar la visualización y actualizar los índices
+                updateImageDisplay();
+                // Resetear selección manual si estaba activa
+                selectedElement = null;
+            }
+        }
+
         function updateImageDisplay() {
             frameImagenes.innerHTML = '';
             
@@ -251,7 +288,17 @@
                 frame.dataset.index = index;
                 frame.dataset.filename = fileData.name;
 
-                frame.innerHTML = `
+                // Botón de eliminar
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-btn';
+                removeBtn.innerHTML = 'x';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation(); // Evitar que el click en el botón active el arrastrar/seleccionar
+                    removeImage(index);
+                };
+                frame.appendChild(removeBtn);
+
+                frame.innerHTML += `
                     <img src="${fileData.url}" alt="${fileData.name}" class="pdf-image">
                     <span class="order-label">Orden: ${index + 1}</span>
                     <span class="filename-label">${fileData.name}</span>
@@ -342,17 +389,22 @@
             const pdf = new jsPDF('p', 'mm', 'a4'); 
             const docWidth = 210;
             const docHeight = 297;
-            let yOffset = 15;
+            const MARGIN_MM = 15;
+            const PAGINATION_Y_MM = docHeight - 10;
 
-            // Constantes de diseño del encabezado
-            const HEADER_HEIGHT_PX = 50;
-            const HEADER_HEIGHT_MM = HEADER_HEIGHT_PX * 25.4 / 96; // Convertir px a mm (96dpi es común en navegadores)
-            const HEADER_LOGO_TEXT_SPACING_MM = 5; // Espacio entre logo y texto en mm
-            const HEADER_LINE_SPACE_MM = 2.5;
-            const CONTENT_START_SPACE_MM = 1.2;
-
+            const HEADER_HEIGHT_PX = 40;
+            const HEADER_HEIGHT_MM = HEADER_HEIGHT_PX * 25.4 / 96;
+            const HEADER_LINE_SPACE_MM = 1;
+            const CONTENT_START_SPACE_MM = 4;
+            const HEADER_Y_START = 10;
+            
+            const IMAGENES_POR_PAGINA = 6;
+            const imgWidth = 80;
+            const imgHeight = 75; 
+            const hGap = 10;
+            const vGap = 5; 
+            
             try {
-                // Cargar logos
                 const logoIzquierdo = new Image();
                 logoIzquierdo.src = 'logo_izquierdo.png';
                 await new Promise(resolve => logoIzquierdo.onload = resolve);
@@ -360,61 +412,59 @@
                 logoDerecho.src = 'logo_derecho.png';
                 await new Promise(resolve => logoDerecho.onload = resolve);
 
-                // Función para añadir el encabezado a cada página
-                const addHeader = (pageNumber = 1, totalPages = 1) => {
-                    let headerY = 15; // Posición Y inicial para el encabezado
+                const totalPages = Math.ceil(loadedFiles.length / IMAGENES_POR_PAGINA);
 
-                    // Título (Centrado)
-                    pdf.setFontSize(16);
-                    const titleText = (pageNumber === 1) ? 'REGISTRO FOTOGRÁFICO' : `REGISTRO FOTOGRÁFICO (Pág. ${pageNumber} de ${totalPages})`;
-                    pdf.text(titleText, docWidth / 2, headerY + HEADER_HEIGHT_MM / 2 - 2, { align: 'center' });
+                const addHeaderAndFooter = (pageNumber) => {
+                    let headerY = HEADER_Y_START;
                     
-                    const titleTextWidth = pdf.getStringUnitWidth(titleText) * pdf.internal.getFontSize() / pdf.internal.scaleFactor;
-                    const titleStartX = (docWidth / 2) - (titleTextWidth / 2);
-                    const titleEndX = (docWidth / 2) + (titleTextWidth / 2);
-
+                    const centerY = headerY + HEADER_HEIGHT_MM / 2;
+                    
                     // Logo Izquierdo
                     if (logoIzquierdo.src) {
                         const aspectRatio = logoIzquierdo.width / logoIzquierdo.height;
                         const logoHeight = HEADER_HEIGHT_MM;
                         const logoWidth = logoHeight * aspectRatio;
-                        const xLogoIzq = titleStartX - logoWidth - HEADER_LOGO_TEXT_SPACING_MM;
+                        const xLogoIzq = MARGIN_MM;
                         pdf.addImage(logoIzquierdo, 'PNG', xLogoIzq, headerY, logoWidth, logoHeight);
                     }
 
+                    // Título (Centrado Vertical y Horizontal)
+                    pdf.setFontSize(16);
+                    const textY = centerY + (pdf.internal.getFontSize() * 0.35 / pdf.internal.scaleFactor);
+                    pdf.text('REGISTRO FOTOGRÁFICO', docWidth / 2, textY, { align: 'center' });
+                    
                     // Logo Derecho
                     if (logoDerecho.src) {
                         const aspectRatio = logoDerecho.width / logoDerecho.height;
                         const logoHeight = HEADER_HEIGHT_MM;
                         const logoWidth = logoHeight * aspectRatio;
-                        const xLogoDer = titleEndX + HEADER_LOGO_TEXT_SPACING_MM;
+                        const xLogoDer = docWidth - MARGIN_MM - logoWidth;
                         pdf.addImage(logoDerecho, 'PNG', xLogoDer, headerY, logoWidth, logoHeight);
                     }
                     
                     // Línea separadora
-                    pdf.line(15, headerY + HEADER_HEIGHT_MM + HEADER_LINE_SPACE_MM, docWidth - 15, headerY + HEADER_HEIGHT_MM + HEADER_LINE_SPACE_MM);
+                    const lineY = headerY + HEADER_HEIGHT_MM + HEADER_LINE_SPACE_MM;
+                    pdf.line(MARGIN_MM, lineY, docWidth - MARGIN_MM, lineY);
                     
-                    return headerY + HEADER_HEIGHT_MM + HEADER_LINE_SPACE_MM + CONTENT_START_SPACE_MM + 5; // Nueva Y de inicio para el contenido
+                    // Pie de Página (Paginación)
+                    pdf.setFontSize(8);
+                    pdf.text(`Página ${pageNumber} de ${totalPages}`, docWidth / 2, PAGINATION_Y_MM, { align: 'center' });
+                    
+                    return lineY + CONTENT_START_SPACE_MM;
                 };
+                
+                let yOffset = addHeaderAndFooter(1);
 
-                const numImagesPerPage = 6;
-                const totalPages = Math.ceil(loadedFiles.length / numImagesPerPage);
-
-                yOffset = addHeader(1, totalPages);
-
-                const imgWidth = 80;
-                const imgHeight = 80;
-                const hGap = 10;
-                const vGap = 15;
                 const startX = (docWidth - (imgWidth * 2 + hGap)) / 2;
                 let currentX = startX;
 
                 for (let i = 0; i < loadedFiles.length; i++) {
                     const fileData = loadedFiles[i];
+                    const currentPage = Math.floor(i / IMAGENES_POR_PAGINA) + 1;
                     
-                    if (yOffset + imgHeight + vGap > docHeight - 15) { // Si no hay espacio en la página actual
+                    if (yOffset + imgHeight + vGap > PAGINATION_Y_MM - 10) { 
                         pdf.addPage();
-                        yOffset = addHeader(Math.floor(i / numImagesPerPage) + 1, totalPages);
+                        yOffset = addHeaderAndFooter(currentPage);
                         currentX = startX;
                     }
                     
@@ -426,14 +476,11 @@
                     
                     pdf.addImage(dataUrl, 'JPEG', currentX, yOffset, imgWidth, imgHeight, null, 'FAST');
                     
-                    pdf.setFontSize(8);
-                    pdf.text(`Foto ${i + 1}`, currentX, yOffset + imgHeight + 3);
-
                     if (currentX === startX) {
                         currentX += imgWidth + hGap;
                     } else {
                         currentX = startX;
-                        yOffset += imgHeight + vGap;
+                        yOffset += imgHeight + vGap; 
                     }
                 }
 
@@ -441,7 +488,7 @@
 
             } catch (error) {
                 console.error("Error al generar el PDF:", error);
-                alert("Ocurrió un error al generar el PDF. Revisa la consola.");
+                alert("Ocurrió un error al generar el PDF. Asegúrate de que los archivos 'logo_izquierdo.png' y 'logo_derecho.png' estén en la misma carpeta y de que estás utilizando un servidor web local (http://) para evitar errores de CORS.");
             } finally {
                 loaderOverlay.style.display = 'none';
                 generatePdfBtn.disabled = false;
